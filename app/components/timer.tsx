@@ -29,19 +29,26 @@ function splitTime(ms: number) {
 
 export function Timer() {
   const router = useRouter();
-  const timer = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const { timer, hydrated } = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    getServerSnapshot,
+  );
   const { durationMs, remainingMs, running, endsAt } = timer;
-  const ready = durationMs > 0;
+
+  // `hydrated` is false while React renders the server snapshot during
+  // hydration, so storage must never be judged empty before it has been read.
+  const ready = hydrated && durationMs > 0;
 
   // `null` until the first animation frame after mount, so a timer restored
   // from storage while running never renders a stale remaining value.
   const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!ready) {
+    if (hydrated && durationMs <= 0) {
       router.replace("/");
     }
-  }, [ready, router]);
+  }, [hydrated, durationMs, router]);
 
   useEffect(() => {
     if (!ready || !running || endsAt === null) {

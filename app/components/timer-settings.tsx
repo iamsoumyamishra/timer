@@ -37,7 +37,7 @@ function parseNonNegativeInt(raw: string): number {
 
 export function TimerSettings() {
   const router = useRouter();
-  const timer = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const { timer } = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
 

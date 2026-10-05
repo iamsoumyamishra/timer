@@ -5,6 +5,12 @@ export type TimerState = {
   endsAt: number | null;
 };
 
+export type TimerSnapshot = {
+  timer: TimerState;
+  /** False while React renders the server snapshot during hydration. */
+  hydrated: boolean;
+};
+
 const STORAGE_KEY = "timer-state";
 
 export const EMPTY_TIMER: TimerState = {
@@ -13,6 +19,8 @@ export const EMPTY_TIMER: TimerState = {
   running: false,
   endsAt: null,
 };
+
+const SERVER_SNAPSHOT: TimerSnapshot = { timer: EMPTY_TIMER, hydrated: false };
 
 export function createTimer(durationMs: number): TimerState {
   return {
@@ -70,6 +78,7 @@ const listeners = new Set<() => void>();
 let cachedRaw: string | null = null;
 let cachedIsFresh = false;
 let cachedState: TimerState = EMPTY_TIMER;
+let cachedSnapshot: TimerSnapshot = SERVER_SNAPSHOT;
 
 function readRaw(): string | null {
   if (typeof window === "undefined") {
@@ -83,22 +92,23 @@ function readRaw(): string | null {
   }
 }
 
-export function getServerSnapshot(): TimerState {
-  return EMPTY_TIMER;
+export function getServerSnapshot(): TimerSnapshot {
+  return SERVER_SNAPSHOT;
 }
 
 // Must return a referentially stable value while storage is unchanged, so the
 // parsed result is cached against the raw string.
-export function getSnapshot(): TimerState {
+export function getSnapshot(): TimerSnapshot {
   const raw = readRaw();
 
   if (!cachedIsFresh || raw !== cachedRaw) {
     cachedRaw = raw;
     cachedIsFresh = true;
     cachedState = parse(raw);
+    cachedSnapshot = { timer: cachedState, hydrated: true };
   }
 
-  return cachedState;
+  return cachedSnapshot;
 }
 
 export function subscribe(listener: () => void): () => void {
