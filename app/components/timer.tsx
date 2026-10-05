@@ -4,6 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import {
+  announcementsBetween,
+  primeVoice,
+  speakAll,
+  SPENT_TEXT,
+  stopSpeaking,
+} from "../lib/timer-announcer";
+import {
   getServerSnapshot,
   getSnapshot,
   saveTimer,
@@ -44,6 +51,13 @@ export function Timer() {
   // from storage while running never renders a stale remaining value.
   const [now, setNow] = useState<number | null>(null);
 
+  // Mirrors the spoken announcement so the alerts are not audio only.
+  const [announcement, setAnnouncement] = useState("");
+
+  useEffect(() => {
+    primeVoice();
+  }, []);
+
   useEffect(() => {
     if (hydrated && durationMs <= 0) {
       router.replace("/");
@@ -55,15 +69,38 @@ export function Timer() {
       return;
     }
 
+    // Seeded from the restored remaining time rather than the full duration, so
+    // reloading mid-countdown never replays thresholds that already elapsed.
+    let previous = Math.max(0, endsAt - Date.now());
     let shown = -1;
+    let spent = false;
+
     let frame = requestAnimationFrame(function tick() {
       const reference = Date.now();
       const remaining = Math.max(0, endsAt - reference);
 
       if (remaining <= 0) {
-        saveTimer({ durationMs, remainingMs: 0, running: false, endsAt: null });
+        if (!spent) {
+          spent = true;
+          speakAll([SPENT_TEXT]);
+          setAnnouncement(SPENT_TEXT);
+          saveTimer({ durationMs, remainingMs: 0, running: false, endsAt: null });
+        }
+
         return;
       }
+
+      // Compared before `previous` advances, so a frame that jumps several
+      // thresholds at once announces each of them, in order.
+      const due = announcementsBetween(previous, remaining);
+
+      if (due.length > 0) {
+        const texts = due.map((entry) => entry.text);
+        speakAll(texts);
+        setAnnouncement(texts.join(". "));
+      }
+
+      previous = remaining;
 
       const centiseconds = Math.floor(remaining / CENTISECOND);
 
@@ -96,10 +133,17 @@ export function Timer() {
     }
 
     const remaining = Math.max(0, endsAt - Date.now());
+
+    // Anything still queued describes time that is now suspended.
+    stopSpeaking();
+    setAnnouncement("");
+
     saveTimer({ ...timer, remainingMs: remaining, running: false, endsAt: null });
   }
 
   function reset() {
+    stopSpeaking();
+    setAnnouncement("");
     saveTimer({ ...timer, remainingMs: durationMs, running: false, endsAt: null });
   }
 
@@ -154,6 +198,10 @@ export function Timer() {
           </span>
         </div>
       )}
+
+      <p className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </p>
 
       <div
         aria-hidden
